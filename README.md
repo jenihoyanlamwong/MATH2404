@@ -1,2 +1,1 @@
-# MATH2404-Data-Visualistation
-Assessment 2 Repository
+echo docs/README.html >> .gitignore
