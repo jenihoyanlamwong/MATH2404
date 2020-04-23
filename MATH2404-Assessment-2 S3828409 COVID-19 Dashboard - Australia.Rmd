@@ -1,0 +1,482 @@
+---
+title: "COVID-19 Dashboard - Australia"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: true
+    theme: sandstone
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library (dplyr)
+library (ggplot2)
+library (lubridate)
+library(httr)
+library (tidyverse)
+library (tibble)
+library (tidyr)
+library (data.table)
+library (leaflet)
+library (mapview)
+library (sf)
+library (raster)
+library (spData)
+library(rgeos)
+library(maptools)
+library(ggmap)
+library(broom)
+library(mapproj)
+library(rgdal)
+library(spdplyr)
+library(geojsonio)
+library(rmapshaper)
+library (plotly)
+library(gganimate)
+library(knitr)
+
+#Confirmed Cases Stats
+httr::GET("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+COVID19_confirmed <-read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+COVID19_confirmed
+COVID19_confirmed_Aus <- filter(COVID19_confirmed, COVID19_confirmed$Country.Region == "Australia")
+COVID19_confirmed_Aus <- subset(COVID19_confirmed_Aus, select = -c(Country.Region, Lat, Long))
+colnames(COVID19_confirmed_Aus)
+str_remove(colnames(COVID19_confirmed_Aus), "[X]")
+date <- str_remove(colnames(COVID19_confirmed_Aus), "[X]")
+names(COVID19_confirmed_Aus)[names(COVID19_confirmed_Aus) == "Province.State"] <- "State"
+date <- as.Date(date, "%m.%d.%y")
+colnames(COVID19_confirmed_Aus) <- date
+colnames (COVID19_confirmed_Aus) [1] <- "State"
+COVID19_confirmed_Aus_clean <- data.frame(t(COVID19_confirmed_Aus[-1]))
+colnames(COVID19_confirmed_Aus_clean)<- COVID19_confirmed_Aus[,1]
+COVID19_confirmed_Aus_clean$Status <- c("Confirmed")
+COVID19_confirmed_Aus_clean <- COVID19_confirmed_Aus_clean %>% rownames_to_column("Date")
+COVID19_confirmed_Aus_clean <- COVID19_confirmed_Aus_clean %>% select("Date","Status", everything())
+COVID19_confirmed_Aus_clean <- COVID19_confirmed_Aus_clean %>% gather(State, Cases, -Date, -Status)
+
+#Death Cases Stats
+httr::GET("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+COVID19_deaths <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+COVID19_deaths
+COVID19_deaths_Aus <- filter(COVID19_deaths, COVID19_deaths$Country.Region == "Australia")
+COVID19_deaths_Aus<- subset(COVID19_deaths_Aus, select = -c(Country.Region, Lat, Long))
+colnames(COVID19_deaths_Aus)
+str_remove(colnames(COVID19_deaths_Aus), "[X]")
+date <- str_remove(colnames(COVID19_deaths_Aus), "[X]")
+names(COVID19_deaths_Aus)[names(COVID19_deaths_Aus) == "Province.State"] <- "State"
+date <- as.Date(date, "%m.%d.%y")
+colnames(COVID19_deaths_Aus) <- date
+colnames (COVID19_deaths_Aus) [1] <- "State"
+COVID19_deaths_Aus_clean <- data.frame(t(COVID19_deaths_Aus[-1]))
+colnames(COVID19_deaths_Aus_clean)<- COVID19_deaths_Aus[,1]
+COVID19_deaths_Aus_clean$Status <- c("Deaths")
+COVID19_deaths_Aus_clean <- COVID19_deaths_Aus_clean %>% rownames_to_column("Date")
+COVID19_deaths_Aus_clean <- COVID19_deaths_Aus_clean %>% select("Date","Status", everything())
+COVID19_deaths_Aus_clean <- COVID19_deaths_Aus_clean %>% gather(State, Cases, -Date, -Status)
+
+#Recovered Cases Stats
+httr::GET("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv")
+COVID19_recovered <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv")
+COVID19_recovered
+COVID19_recovered_Aus <- filter(COVID19_recovered, COVID19_recovered$Country.Region == "Australia")
+COVID19_recovered_Aus <- subset(COVID19_recovered_Aus, select = -c(Country.Region, Lat, Long))
+colnames(COVID19_recovered_Aus)
+str_remove(colnames(COVID19_recovered_Aus), "[X]")
+date <- str_remove(colnames(COVID19_recovered_Aus), "[X]")
+names(COVID19_recovered_Aus)[names(COVID19_recovered_Aus) == "Province.State"] <- "State"
+date <- as.Date(date, "%m.%d.%y")
+colnames(COVID19_recovered_Aus) <- date
+colnames (COVID19_recovered_Aus) [1] <- "State"
+COVID19_recovered_Aus_clean <- data.frame(t(COVID19_recovered_Aus[-1]))
+colnames(COVID19_recovered_Aus_clean)<- COVID19_recovered_Aus[,1]
+COVID19_recovered_Aus_clean$Status <- c("Recovered")
+COVID19_recovered_Aus_clean <- COVID19_recovered_Aus_clean %>% rownames_to_column("Date")
+COVID19_recovered_Aus_clean <- COVID19_recovered_Aus_clean %>% select("Date","Status", everything())
+COVID19_recovered_Aus_clean <- COVID19_recovered_Aus_clean %>% gather(State, Cases, -Date, -Status)
+
+#Combined them together
+COVID19_Aus <- rbind(COVID19_confirmed_Aus_clean,COVID19_deaths_Aus_clean, COVID19_recovered_Aus_clean)
+Date <- as.Date (COVID19_Aus$Date)
+Status <- COVID19_Aus$Status
+State <- COVID19_Aus$State
+Cases <- COVID19_Aus$Cases
+
+#Breakdown stats by status
+COVID19_confirmed_Aus_clean <- COVID19_Aus %>% filter(Status == "Confirmed")
+colnames(COVID19_confirmed_Aus_clean)
+names(COVID19_confirmed_Aus_clean)[names(COVID19_confirmed_Aus_clean) == "Cases"] <- "Confirmed Cases"
+names(COVID19_confirmed_Aus_clean)[names(COVID19_confirmed_Aus_clean) == "State"] <- "Confirmed State"
+COVID19_deaths_Aus_clean <- COVID19_Aus %>% filter(Status == "Deaths")
+names(COVID19_deaths_Aus_clean)[names(COVID19_deaths_Aus_clean) == "Cases"] <- "Deaths Cases"
+names(COVID19_deaths_Aus_clean)[names(COVID19_deaths_Aus_clean) == "State"] <- "Deaths State"
+COVID19_recovered_Aus_clean <- COVID19_Aus %>% filter(Status == "Recovered")
+names(COVID19_recovered_Aus_clean)[names(COVID19_recovered_Aus_clean) == "Cases"] <- "Recovered Cases"
+names(COVID19_recovered_Aus_clean)[names(COVID19_recovered_Aus_clean) == "State"] <- "Recovered State"
+
+#Breakdown results by State - Confirmed
+COVID19_confirmed_ACT <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State` == "Australian Capital Territory")
+COVID19_confirmed_WA <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "Western Australia")
+COVID19_confirmed_QLD <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "Queensland")
+COVID19_confirmed_NSW <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "New South Wales")
+COVID19_confirmed_VIC <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "Victoria")
+COVID19_confirmed_SA <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "South Australia")
+COVID19_confirmed_NT <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "Northern Territory")
+COVID19_confirmed_TAS <- COVID19_confirmed_Aus_clean %>% filter(COVID19_confirmed_Aus_clean$`Confirmed State`  == "Tasmania")
+
+#Breakdown results by State - Deaths
+COVID19_deaths_ACT <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "Australian Capital Territory")
+COVID19_deaths_WA <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State`== "Western Australia")
+COVID19_deaths_QLD <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "Queensland")
+COVID19_deaths_NSW <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "New South Wales")
+COVID19_deaths_VIC <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "Victoria")
+COVID19_deaths_SA <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "South Australia")
+COVID19_deaths_NT <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "Northern Territory")
+COVID19_deaths_TAS <- COVID19_deaths_Aus_clean %>% filter(COVID19_deaths_Aus_clean$`Deaths State` == "Tasmania")
+
+#Breakdown results by State - Recovered
+COVID19_recovered_ACT <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Australian Capital Territory")
+COVID19_recovered_WA <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Western Australia")
+COVID19_recovered_QLD <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Queensland")
+COVID19_recovered_NSW <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "New South Wales")
+COVID19_recovered_VIC <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Victoria")
+COVID19_recovered_SA <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "South Australia")
+COVID19_recovered_NT <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Northern Territory")
+COVID19_recovered_TAS <- COVID19_recovered_Aus_clean %>% filter(COVID19_recovered_Aus_clean$`Recovered State` == "Tasmania")
+
+#Long and Lat for Australia by State
+Aus_Lat_Long <- filter(COVID19_confirmed, COVID19_confirmed$Country.Region == "Australia")
+Aus_Lat_Long <- subset(Aus_Lat_Long , select = c(Province.State, Lat, Long))
+names(Aus_Lat_Long)[names(Aus_Lat_Long) == "Province.State"] <- "State"
+
+#https://www.latlong.net/category/states-14-14.html - Centre of States Lat & Long
+Aus_Lat_Long$Lat <- c(-35.4735,	-31.840233, -19.491411,-20.917574, -30.000233,-41.4545,-37.020100, -25.760321)
+Aus_Lat_Long$Long <- c(149.0124, 	145.612793, 132.550964, 142.702789, 136.209152, 145.9707, 144.964600, 122.805176)
+
+#Mergeing all Stats
+COVID19_Aus <- merge(COVID19_Aus, Aus_Lat_Long, by.x= c("State"), by.y= c("State"))
+
+#Breakdown results by State
+COVID19_Aus_NSW <- COVID19_Aus %>% filter(State == "New South Wales")
+COVID19_Aus_NSW <- COVID19_Aus_NSW [order(COVID19_Aus_NSW$Date),]
+COVID19_Aus_VIC <- COVID19_Aus %>% filter(State == "Victoria")
+COVID19_Aus_VIC <- COVID19_Aus_VIC [order(COVID19_Aus_VIC$Date),]
+COVID19_Aus_QLD <- COVID19_Aus %>% filter(State == "Queensland")
+COVID19_Aus_QLD <- COVID19_Aus_QLD [order(COVID19_Aus_QLD$Date),]
+COVID19_Aus_ACT <- COVID19_Aus %>% filter(State == "Australian Capital Territory")
+COVID19_Aus_ACT <- COVID19_Aus_ACT [order(COVID19_Aus_ACT$Date),]
+COVID19_Aus_TAS <- COVID19_Aus %>% filter(State == "Tasmania")
+COVID19_Aus_TAS <- COVID19_Aus_TAS [order(COVID19_Aus_TAS$Date),]
+COVID19_Aus_SA <- COVID19_Aus %>% filter(State == "South Australia")
+COVID19_Aus_SA <- COVID19_Aus_SA [order(COVID19_Aus_SA$Date),]
+COVID19_Aus_WA <- COVID19_Aus %>% filter(State == "Western Australia")
+COVID19_Aus_WA <- COVID19_Aus_WA [order(COVID19_Aus_WA$Date),]
+COVID19_Aus_NT <- COVID19_Aus %>% filter(State == "Northern Territory")
+COVID19_Aus_NT <- COVID19_Aus_NT [order(COVID19_Aus_NT$Date),]
+
+#State by Population
+State <- c("Australian Capital Territory", "Northern Territory", "Tasmania", "Western Australia", "South Australia", "Queensland", "Victoria", "New South Wales")
+Population <- c(428100, 245600, 535500, 2630600, 1756500,5115500,6629900,8118000)
+State_Population <- data.frame(State, Population)
+
+
+#Shape File for State Map
+#https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/1259.0.30.001July%202011?OpenDocument
+unzip("1259030001_ste11aaust_shape.zip")
+State_Map <- readOGR(dsn = getwd(),layer = "STE11aAust")
+State_Map <- subset(State_Map, State_Map$STATE_NAME %in% c("Australian Capital Territory", "New South Wales", "Victoria", "Queensland", "South Australia", "Western Australia", "Tasmania", "Northern Territory"))
+head(State_Map@data)
+names(State_Map)
+
+#Text for popup
+QLD <- paste(
+  '<strong>',tail(COVID19_Aus_QLD$Date,1),'</strong>','<strong>',"- QLD",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_QLD$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_QLD$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_QLD$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+NSW <- paste(
+  '<strong>',tail(COVID19_Aus_NSW$Date,1),'</strong>','<strong>',"- NSW",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_NSW$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_NSW$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_NSW$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+VIC <- paste(
+  '<strong>',tail(COVID19_Aus_VIC$Date,1),'</strong>','<strong>',"- VIC",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_VIC$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_VIC$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_VIC$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+WA <- paste(
+  '<strong>',tail(COVID19_Aus_WA$Date,1),'</strong>','<strong>',"- WA",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_WA$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_WA$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_WA$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+SA <- paste(
+  '<strong>',tail(COVID19_Aus_SA$Date,1),'</strong>','<strong>',"- SA",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_SA$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_SA$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_SA$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+ACT <- paste(
+  '<strong>',tail(COVID19_Aus_ACT$Date,1),'</strong>','<strong>',"- ACT",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_ACT$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_ACT$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_ACT$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+NT <- paste(
+  '<strong>',tail(COVID19_Aus_NT$Date,1),'</strong>','<strong>',"- NT",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_NT$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_NT$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_NT$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+TAS <- paste(
+  '<strong>',tail(COVID19_Aus_TAS$Date,1),'</strong>','<strong>',"- TAS",'</strong>',"<br/>",
+  '<strong>', "Confirmed: ", '</strong>', tail(COVID19_confirmed_TAS$`Confirmed Cases`,1), "<br/>", 
+  '<strong>',"Deaths: ", '</strong>', tail(COVID19_deaths_TAS$`Deaths Cases`,1), "<br/>", 
+  '<strong>',"Recovered: ",'</strong>', tail(COVID19_recovered_TAS$`Recovered Cases`,1), sep="") %>%
+  lapply(htmltools::HTML)
+
+#Map View for Cases
+COVID19_Aus_Map_Polygons <- leaflet(data = State_Map) %>%
+  addTiles() %>%
+  addPolygons(fillColor = "green", highlightOptions = highlightOptions(color = "white", weight = 2, bringToFront = FALSE,stroke = FALSE, fillOpacity = 0.7)) %>%
+  addCircles(color = "green",lng = COVID19_Aus_NSW$Long, lat = COVID19_Aus_NSW$Lat, radius = 0, label = NSW, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>% 
+  addCircles(color = "green",lng = COVID19_Aus_ACT$Long, lat = COVID19_Aus_ACT$Lat, radius = 0, label = ACT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_VIC$Long, lat = COVID19_Aus_VIC$Lat, radius = 0, label = VIC, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_QLD$Long, lat = COVID19_Aus_QLD$Lat, radius = 0, label = QLD, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_SA$Long, lat = COVID19_Aus_SA$Lat, radius = 0, label = SA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_WA$Long, lat = COVID19_Aus_WA$Lat, radius = 0, label = WA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_NT$Long, lat = COVID19_Aus_NT$Lat, radius = 0, label = NT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_TAS$Long, lat = COVID19_Aus_TAS$Lat, radius = 0, label = TAS, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right"))
+
+COVID19_Aus_Map <- leaflet(COVID19_Aus)%>%
+  addTiles() %>%
+  addCircleMarkers(lng = COVID19_Aus_NSW$Long, lat = COVID19_Aus_NSW$Lat, label = NSW, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>% 
+  addCircleMarkers(lng = COVID19_Aus_ACT$Long, lat = COVID19_Aus_ACT$Lat, label = ACT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircleMarkers(lng = COVID19_Aus_VIC$Long, lat = COVID19_Aus_VIC$Lat, label = VIC, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircleMarkers(lng = COVID19_Aus_QLD$Long, lat = COVID19_Aus_QLD$Lat, label = QLD, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircleMarkers(lng = COVID19_Aus_SA$Long, lat = COVID19_Aus_SA$Lat, label = SA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircleMarkers(lng = COVID19_Aus_WA$Long, lat = COVID19_Aus_WA$Lat, label = WA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircleMarkers(lng = COVID19_Aus_NT$Long, lat = COVID19_Aus_NT$Lat, label = NT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
+  addCircleMarkers(lng = COVID19_Aus_TAS$Long, lat = COVID19_Aus_TAS$Lat, label = TAS, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right"))
+
+#Graph for Cases
+confirmed_state <- length(c(COVID19_confirmed_Aus_clean$`Confirmed State`))
+deaths_state <- length(c(COVID19_deaths_Aus_clean$`Deaths State`))
+recovered_state <- length(c(COVID19_recovered_Aus_clean$`Recovered State`))
+
+updatemenus <- list(list(
+    active = -1,
+    type = "buttons",
+    buttons = list(
+      list(
+        label = "Confirmed",
+        method = "update",
+        args = list(list(visible =c(TRUE, FALSE, FALSE)),
+                    list(title = "COVID19 Australia Confirmed Cases"))),
+      list(
+        label = "Deaths",
+        method = "update",
+        args = list(list(visible = c(FALSE, TRUE, FALSE)),
+                    list(title = "COVID19 Australia Deaths Cases"))),
+        list(
+          label = "Recovered",
+          method = "update",
+          args = list(list(visible = c(FALSE,FALSE,TRUE)),
+                      list(title = "COVID19 Australia Recovered Cases"))),
+        list(
+          label = "View All",
+          method = "update",
+          args = list(list(visible = c(TRUE,TRUE,TRUE)),
+                      list(title = "COVID19 Australia Cases - Confirmed, Deaths & Recovered"))))))
+
+COVID19_Aus_plot <- plot_ly() %>% 
+  add_lines(data=COVID19_confirmed_Aus_clean, x=COVID19_confirmed_Aus_clean$Date, y=COVID19_confirmed_Aus_clean$`Confirmed Cases`, color=COVID19_confirmed_Aus_clean$`Confirmed State`, visible = TRUE, line = list(colors = "Dark2", width = 4)) %>%
+  add_lines(data=COVID19_deaths_Aus_clean, x=COVID19_deaths_Aus_clean$Date, y=COVID19_deaths_Aus_clean$`Deaths Cases`, color=COVID19_deaths_Aus_clean$`Deaths State`, visible = FALSE,line = list( colors = "Dark2", width = 3, dash = 'dash')) %>%
+  add_lines(data=COVID19_recovered_Aus_clean, x=COVID19_recovered_Aus_clean$Date, y=COVID19_recovered_Aus_clean$`Recovered Cases`, color=COVID19_recovered_Aus_clean$`Recovered State`, visible = FALSE, line = list( colors = "Dark2", width = 2, dash = 'dot'))
+
+COVID19_Aus_plot<- COVID19_Aus_plot %>% layout(title = "COVID19 Australia Cases - Confirmed, Deaths & Recovered", showlegend=TRUE,
+                          xaxis=list(title="Date"),
+                          yaxis=list(title="Number of Cases"), updatemenus = updatemenus)
+
+COVID19_Aus_plot
+
+#Aggregate Stats based on date
+COVID19_Aus_confirmed_TOTAL <- aggregate(COVID19_confirmed_Aus_clean$`Confirmed Cases`, by=list(COVID19_confirmed_Aus_clean$Date), FUN = sum)
+head(COVID19_Aus_confirmed_TOTAL)
+names(COVID19_Aus_confirmed_TOTAL)[names(COVID19_Aus_confirmed_TOTAL) == "Group.1"] <- "Date"
+names(COVID19_Aus_confirmed_TOTAL)[names(COVID19_Aus_confirmed_TOTAL) == "x"] <- "Total Confirmed Cases"
+COVID19_Aus_confirmed_TOTAL <- COVID19_Aus_confirmed_TOTAL %>% mutate("Confirmed Diff" = c(0,diff(COVID19_Aus_confirmed_TOTAL$`Total Confirmed Cases`)))
+as.Date(COVID19_Aus_confirmed_TOTAL$Date)
+
+COVID19_Aus_deaths_TOTAL <- aggregate(COVID19_deaths_Aus_clean$`Deaths Cases`, by=list(COVID19_deaths_Aus_clean$Date), FUN = sum)
+head(COVID19_Aus_deaths_TOTAL)
+names(COVID19_Aus_deaths_TOTAL)[names(COVID19_Aus_deaths_TOTAL) == "Group.1"] <- "Date"
+names(COVID19_Aus_deaths_TOTAL)[names(COVID19_Aus_deaths_TOTAL) == "x"] <- "Total Deaths Cases"
+COVID19_Aus_deaths_TOTAL <- COVID19_Aus_deaths_TOTAL %>% mutate("Deaths Diff" = c(0,diff(COVID19_Aus_deaths_TOTAL$`Total Deaths Cases`)))
+as.Date(COVID19_Aus_deaths_TOTAL$Date)
+
+COVID19_Aus_recovered_TOTAL <- aggregate(COVID19_recovered_Aus_clean$`Recovered Cases`, by=list(COVID19_recovered_Aus_clean$Date), FUN = sum)
+head(COVID19_Aus_recovered_TOTAL)
+names(COVID19_Aus_recovered_TOTAL)[names(COVID19_Aus_recovered_TOTAL) == "Group.1"] <- "Date"
+names(COVID19_Aus_recovered_TOTAL)[names(COVID19_Aus_recovered_TOTAL) == "x"] <- "Total Recovered Cases"
+COVID19_Aus_recovered_TOTAL <- COVID19_Aus_recovered_TOTAL %>% mutate("Recovered Diff" = c(0,diff(COVID19_Aus_recovered_TOTAL$`Total Recovered Cases`)))
+as.Date(COVID19_Aus_recovered_TOTAL$Date)
+
+COVID19_Aus_Total <- merge (COVID19_Aus_confirmed_TOTAL,COVID19_Aus_deaths_TOTAL, by.x= c("Date"))
+COVID19_Aus_Total <- merge (COVID19_Aus_Total, COVID19_Aus_recovered_TOTAL, by.x= c("Date"))
+
+```
+
+### COVID-19 Australia Map View
+
+```{r}
+COVID19_Aus_Map <- leaflet(data = State_Map) %>%
+  addTiles() %>%
+  addPolygons(fillColor = "green", highlightOptions = highlightOptions(color = "white", weight = 2, bringToFront = FALSE,stroke = FALSE, fillOpacity = 0.7)) %>%
+  addCircles(color = "green",lng = COVID19_Aus_NSW$Long, lat = COVID19_Aus_NSW$Lat, radius = 0, label = NSW, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>% 
+  addCircles(color = "green",lng = COVID19_Aus_ACT$Long, lat = COVID19_Aus_ACT$Lat, radius = 0, label = ACT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_VIC$Long, lat = COVID19_Aus_VIC$Lat, radius = 0, label = VIC, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_QLD$Long, lat = COVID19_Aus_QLD$Lat, radius = 0, label = QLD, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_SA$Long, lat = COVID19_Aus_SA$Lat, radius = 0, label = SA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_WA$Long, lat = COVID19_Aus_WA$Lat, radius = 0, label = WA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_NT$Long, lat = COVID19_Aus_NT$Lat, radius = 0, label = NT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
+  addCircles(color = "green",lng = COVID19_Aus_TAS$Long, lat = COVID19_Aus_TAS$Lat, radius = 0, label = TAS, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right"))
+
+COVID19_Aus_Map
+```
+
+***
+This map provides the latest statistic of COVID-19 confirmed, death and recovered cases in Australia broken down by states (and territories). 
+
+Please feel free to hover your cursor across the map. When you place your cursor on the markers, they will showcase the lastest statistic from the Novel Coronavirus (COVID-19) Cases, provided by Johns Hopkins Whiting School of Engineering CSSE (2020).
+
+Source: Australian Bureau of Australia 2011
+
+### COVID-19 Confirmed Cases in Australia
+
+```{r}
+COVID19_Aus_plot_confirmed <- plot_ly() %>% 
+  add_lines(data=COVID19_confirmed_Aus_clean, x=COVID19_confirmed_Aus_clean$Date, y=COVID19_confirmed_Aus_clean$`Confirmed Cases`, color=COVID19_confirmed_Aus_clean$`Confirmed State`, visible = TRUE, line = list(colors = "Dark2", width = 4), hovertemplate = paste('%{x}','<br>Cases: %{y}<br>'),textposition = 'outside')
+
+COVID19_Aus_plot_confirmed <-COVID19_Aus_plot_confirmed %>% layout(
+  xaxis = list(
+    title = "Date",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "Number of Cases",
+    zeroline = F
+  ),
+  title = "COVID-19 Confirmed Cases in Australia", showlegend=TRUE)
+
+COVID19_Aus_plot_confirmed
+
+```
+
+***
+This is a visual demonstration on the trend of reported confirmed cases in Australia broken down by states (and territories). 
+
+You can hover your cursor across the legend on the right to select or unselect specific states or territories. You can also see the daily number of cases if you hover your cursor on the lines. 
+
+Source: Johns Hopkins Whiting School of Engineering CSSE (2020)
+ 
+### COVID-19 Death Cases in Australia
+    
+```{r}
+COVID19_Aus_plot_deaths <- plot_ly() %>% 
+  add_lines(data=COVID19_deaths_Aus_clean, x=COVID19_deaths_Aus_clean$Date, y=COVID19_deaths_Aus_clean$`Deaths Cases`, color=COVID19_deaths_Aus_clean$`Deaths State`,line = list( colors = "Dark2", width = 3, dash = 'dash'), hovertemplate = paste('%{x}','<br>Cases: %{y}<br>'),textposition = 'outside')
+
+COVID19_Aus_plot_deaths <- COVID19_Aus_plot_deaths %>% layout(
+  xaxis = list(
+    title = "Date",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "Number of Cases",
+    zeroline = F
+  ),
+  title = "COVID-19 Death Cases in Australia", showlegend=TRUE)
+
+COVID19_Aus_plot_deaths
+
+```
+
+***
+This is a visual demonstration on the trend of reported death cases in Australia broken down by states (and territories). 
+
+You can hover your cursor across the legend on the right to select or unselect specific states or territories. You can also see the daily number of cases if you hover your cursor on the lines. 
+
+Source: Johns Hopkins Whiting School of Engineering CSSE (2020)
+
+### COVID-19 Recovered Cases in Australia
+    
+```{r}
+COVID19_Aus_plot_recovered <- plot_ly() %>% 
+  add_lines(data=COVID19_recovered_Aus_clean, x=COVID19_recovered_Aus_clean$Date, y=COVID19_recovered_Aus_clean$`Recovered Cases`, color=COVID19_recovered_Aus_clean$`Recovered State`,line = list( colors = "Dark2", width = 2, dash = 'dot'), hovertemplate = paste('%{x}','<br>Cases: %{y}<br>'),textposition = 'outside')
+
+COVID19_Aus_plot_recovered <- COVID19_Aus_plot_recovered %>% layout(
+  xaxis = list(
+    title = "Date",
+    zeroline = F
+  ),
+  yaxis = list(
+    title = "Number of Cases",
+    zeroline = F
+  ),
+  title = "COVID-19 Recovered Cases in Australia", showlegend=TRUE
+) 
+COVID19_Aus_plot_recovered 
+
+```
+
+***
+This is a visual demonstration on the trend of reported recovered cases in Australia broken down by states (and territories). 
+
+You can hover your cursor across the legend on the right to select or unselect specific states or territories. You can also see the daily number of cases if you hover your cursor on the lines. 
+
+Source: Johns Hopkins Whiting School of Engineering CSSE (2020)
+
+### COVID-19 Cases Day by Day Comparison in Australia
+
+```{r}
+COVID19_daybyday <- plot_ly(COVID19_Aus_Total, x = COVID19_Aus_Total$Date, y= COVID19_Aus_Total$`Confirmed Diff`, type = 'bar', name = "Confirmed", marker = list(color = c('red')), hovertemplate = paste('%{x}','<br>Daily Cases: %{y}<br>'), textposition = 'outside')
+
+COVID19_daybyday <- COVID19_daybyday%>% add_trace(y = COVID19_Aus_Total$`Deaths Diff`, name = 'Death', marker = list(color = c('black'))) %>% add_trace(y = COVID19_Aus_Total$`Recovered Diff`, name = 'Recovered', marker = list(color = c('green'))) 
+
+COVID19_daybyday <- COVID19_daybyday %>% layout(title = "COVID-19 Cases Day by Day Comparison in Australia",barmode = 'group',
+          xaxis = list(
+           title = "Date",
+           tickfont = list(
+             size = 10)),
+         yaxis = list(
+           title = 'Number of Cases',
+           titlefont = list(
+             size = 16) ))
+
+COVID19_daybyday
+
+```
+
+***
+This is a visual demonstration on the daily reported cases in Australia broken down by status of the cases. 
+
+You can hover your cursor across the legend on the right to select or unselect specific status. You can also see the daily number of cases if you hover your cursor on the lines. 
+
+Source: Johns Hopkins Whiting School of Engineering CSSE (2020)
+
+### The Novel Coronavirus (COVID-19) Cases (Johns Hopkins Whiting School of Engineering CSSE 2020) 
+
+```{r}
+knitr::kable(COVID19_Aus)
+```
+
+### Reference List
+
+Australian Bureau of Statistics 2011, <i>State and Territory ASGC Ed 2011 Digital Boundaries in ESRI Shapefile Format </i>. Map file, Buildings data layer, viewed 12 April 2020, <https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/1259.0.30.001July%202011?OpenDocument>
+
+Johns Hopkins Whiting School of Engineering CSSE 2020, <i>Novel Coronavirus 2019 time series data on cases</i>, Australia's climate change datasets, data file, Johns Hopkins Whiting School of Engineering, viewed 9 April 2020, <https://github.com/datasets/covid-19>.
+
+LatLong.net 2020, <i>States in Australia</i>, LatLong.net, viewed 9 April 2020, <https://www.latlong.net/category/states-14-14.html>.
+
