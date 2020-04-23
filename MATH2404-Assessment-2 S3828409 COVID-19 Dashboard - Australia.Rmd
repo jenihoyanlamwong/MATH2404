@@ -173,12 +173,6 @@ COVID19_Aus_WA <- COVID19_Aus_WA [order(COVID19_Aus_WA$Date),]
 COVID19_Aus_NT <- COVID19_Aus %>% filter(State == "Northern Territory")
 COVID19_Aus_NT <- COVID19_Aus_NT [order(COVID19_Aus_NT$Date),]
 
-#State by Population
-State <- c("Australian Capital Territory", "Northern Territory", "Tasmania", "Western Australia", "South Australia", "Queensland", "Victoria", "New South Wales")
-Population <- c(428100, 245600, 535500, 2630600, 1756500,5115500,6629900,8118000)
-State_Population <- data.frame(State, Population)
-
-
 #Shape File for State Map
 #https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/1259.0.30.001July%202011?OpenDocument
 unzip("1259030001_ste11aaust_shape.zip")
@@ -250,57 +244,10 @@ COVID19_Aus_Map_Polygons <- leaflet(data = State_Map) %>%
   addCircles(color = "green",lng = COVID19_Aus_NT$Long, lat = COVID19_Aus_NT$Lat, radius = 0, label = NT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
   addCircles(color = "green",lng = COVID19_Aus_TAS$Long, lat = COVID19_Aus_TAS$Lat, radius = 0, label = TAS, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right"))
 
-COVID19_Aus_Map <- leaflet(COVID19_Aus)%>%
-  addTiles() %>%
-  addCircleMarkers(lng = COVID19_Aus_NSW$Long, lat = COVID19_Aus_NSW$Lat, label = NSW, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>% 
-  addCircleMarkers(lng = COVID19_Aus_ACT$Long, lat = COVID19_Aus_ACT$Lat, label = ACT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
-  addCircleMarkers(lng = COVID19_Aus_VIC$Long, lat = COVID19_Aus_VIC$Lat, label = VIC, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
-  addCircleMarkers(lng = COVID19_Aus_QLD$Long, lat = COVID19_Aus_QLD$Lat, label = QLD, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right")) %>%
-  addCircleMarkers(lng = COVID19_Aus_SA$Long, lat = COVID19_Aus_SA$Lat, label = SA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
-  addCircleMarkers(lng = COVID19_Aus_WA$Long, lat = COVID19_Aus_WA$Lat, label = WA, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "left")) %>%
-  addCircleMarkers(lng = COVID19_Aus_NT$Long, lat = COVID19_Aus_NT$Lat, label = NT, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "auto")) %>%
-  addCircleMarkers(lng = COVID19_Aus_TAS$Long, lat = COVID19_Aus_TAS$Lat, label = TAS, labelOptions = labelOptions( style = list("font-weight" = "normal", padding = "3px 8px"), textsize = "13px", direction = "right"))
-
 #Graph for Cases
 confirmed_state <- length(c(COVID19_confirmed_Aus_clean$`Confirmed State`))
 deaths_state <- length(c(COVID19_deaths_Aus_clean$`Deaths State`))
 recovered_state <- length(c(COVID19_recovered_Aus_clean$`Recovered State`))
-
-updatemenus <- list(list(
-    active = -1,
-    type = "buttons",
-    buttons = list(
-      list(
-        label = "Confirmed",
-        method = "update",
-        args = list(list(visible =c(TRUE, FALSE, FALSE)),
-                    list(title = "COVID19 Australia Confirmed Cases"))),
-      list(
-        label = "Deaths",
-        method = "update",
-        args = list(list(visible = c(FALSE, TRUE, FALSE)),
-                    list(title = "COVID19 Australia Deaths Cases"))),
-        list(
-          label = "Recovered",
-          method = "update",
-          args = list(list(visible = c(FALSE,FALSE,TRUE)),
-                      list(title = "COVID19 Australia Recovered Cases"))),
-        list(
-          label = "View All",
-          method = "update",
-          args = list(list(visible = c(TRUE,TRUE,TRUE)),
-                      list(title = "COVID19 Australia Cases - Confirmed, Deaths & Recovered"))))))
-
-COVID19_Aus_plot <- plot_ly() %>% 
-  add_lines(data=COVID19_confirmed_Aus_clean, x=COVID19_confirmed_Aus_clean$Date, y=COVID19_confirmed_Aus_clean$`Confirmed Cases`, color=COVID19_confirmed_Aus_clean$`Confirmed State`, visible = TRUE, line = list(colors = "Dark2", width = 4)) %>%
-  add_lines(data=COVID19_deaths_Aus_clean, x=COVID19_deaths_Aus_clean$Date, y=COVID19_deaths_Aus_clean$`Deaths Cases`, color=COVID19_deaths_Aus_clean$`Deaths State`, visible = FALSE,line = list( colors = "Dark2", width = 3, dash = 'dash')) %>%
-  add_lines(data=COVID19_recovered_Aus_clean, x=COVID19_recovered_Aus_clean$Date, y=COVID19_recovered_Aus_clean$`Recovered Cases`, color=COVID19_recovered_Aus_clean$`Recovered State`, visible = FALSE, line = list( colors = "Dark2", width = 2, dash = 'dot'))
-
-COVID19_Aus_plot<- COVID19_Aus_plot %>% layout(title = "COVID19 Australia Cases - Confirmed, Deaths & Recovered", showlegend=TRUE,
-                          xaxis=list(title="Date"),
-                          yaxis=list(title="Number of Cases"), updatemenus = updatemenus)
-
-COVID19_Aus_plot
 
 #Aggregate Stats based on date
 COVID19_Aus_confirmed_TOTAL <- aggregate(COVID19_confirmed_Aus_clean$`Confirmed Cases`, by=list(COVID19_confirmed_Aus_clean$Date), FUN = sum)
